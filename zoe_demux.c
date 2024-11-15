@@ -268,6 +268,7 @@ int main(int argc, char *argv[])
     uint8_t  ssid                 = 0;
     uint16_t packet_size          = 0;
     uint16_t payload_offset       = 0;
+    uint32_t file_idx             = 0;
 
     if (argc != 2) {
         printf("usage: %s <pss>\n", argv[0]);
@@ -297,6 +298,7 @@ int main(int argc, char *argv[])
     }
 
     while (ftell(pss) < pss_size) {
+        file_idx = ftell(pss);
         efread(streambuf, 4, pss, pss_path);
 
         id = get_u32_be(streambuf);
@@ -315,11 +317,13 @@ int main(int argc, char *argv[])
             //
             // Program End
             //
+            printf("Found PROGR_END at %08X\n", file_idx);
             break;
         } else if (id == 0xBA) {
             //
             // Pack Header - skip
             //
+            printf("Found PACK_HEAD at %08X\n", file_idx);
             efread(streambuf, 1, pss, pss_path);
             if ((*streambuf & 0xF1) == 0x21) {
                 // MPEG-1
@@ -332,22 +336,27 @@ int main(int argc, char *argv[])
                     efseek(pss, (long int)(streambuf[8] & 7), SEEK_CUR, pss_path);
                 }
             }
+            printf("Size was %08x\n", (uint32_t)(ftell(pss) - file_idx));
         } else if (id == 0xBB) {
             //
             // Program Stream System Header - skip
             //
+            printf("Found PRG_ST_HD at %08X\n", file_idx);
             efread(streambuf, 2, pss, pss_path);
             efseek(pss, (long int)get_u16_be(streambuf), SEEK_CUR, pss_path);
+            printf("Size was %08x\n", (uint32_t)(ftell(pss) - file_idx));
         } else if (id >= 0xBD && id <= 0xEF) {
             //
             // Packetized Elementary Streams (PES)
             //
+            printf("Found PES_HEADR at %08X\n", file_idx);
             efread(streambuf, 2, pss, pss_path);
             packet_size = get_u16_be(streambuf);
             if (id == 0xBE) {
                 //
                 // Padding Stream - skip
                 //
+                printf("PES IS A PADDING STREAM\n");
                 efseek(pss, (long int)packet_size, SEEK_CUR, pss_path);
             } else {
                 //
@@ -387,18 +396,25 @@ int main(int argc, char *argv[])
                     ssid = streambuf[0x10];
 
                     if (ssid == ZOE_SSID_SUBS_JP) {
+                        printf("Stream is JP subs\n");
                         stream = STREAM_SUBS_JP;
                     } else if (ssid == ZOE_SSID_ADPCM) {
+                        printf("Stream is ADPCM\n");
                         stream = STREAM_ADPCM;
                     } else if (ssid == ZOE_SSID_BIN) {
+                        printf("Stream is BIN\n");
                         stream = STREAM_BIN;
                     } else if (ssid == ZOE_SSID_SUBS_EN) {
+                        printf("Stream is EN subs\n");
                         stream = STREAM_SUBS_EN;
                     } else if (ssid == ZOE_SSID_SUBS_FR) {
+                        printf("Stream is FR subs\n");
                         stream = STREAM_SUBS_FR;
                     } else if (ssid == ZOE_SSID_SUBS_DE) {
+                        printf("Stream is DE subs\n");
                         stream = STREAM_SUBS_DE;
                     } else if (ssid == ZOE_SSID_SUBS_IT) {
+                        printf("Stream is IT subs\n");
                         stream = STREAM_SUBS_IT;
                     } else {
                         printf(
@@ -411,11 +427,13 @@ int main(int argc, char *argv[])
                     //
                     // MPEG-1 / MPEG-2 audio streams
                     //
+                    printf("Stream is MPEG audio\n");
                     stream = STREAM_AUDIO;
                 } else if (id >= 0xE0 && id <= 0xEF) {
                     //
                     // MPEG-1 / MPEG-2 video streams
                     //
+                    printf("Stream is MPEG video\n");
                     stream = STREAM_VIDEO;
                 }
 
@@ -442,6 +460,7 @@ int main(int argc, char *argv[])
 
                 efwrite(streambuf + payload_offset, packet_size - payload_offset, streams[stream].f, streams[stream].path);
             }
+            printf("Size was %08x\n", (uint32_t)(ftell(pss) - file_idx));
         } else {
             printf(
                 "%s: 0x%08lX: unexpected MPEG ID: %02" PRIX32 "\n",
